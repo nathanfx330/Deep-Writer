@@ -112,6 +112,7 @@ class ProjectState extends ChangeNotifier {
   String _ollamaModel = "gemma3:12b";
   List<String> _availableModels = ["gemma3:12b"];
   bool _isScanningModels = false;
+  bool _isPreloadingModel = false;
 
   ProjectState() { 
     newProject(); 
@@ -139,6 +140,7 @@ class ProjectState extends ChangeNotifier {
   String get ollamaModel => _ollamaModel;
   List<String> get availableModels => _availableModels;
   bool get isScanningModels => _isScanningModels;
+  bool get isPreloadingModel => _isPreloadingModel;
 
   void setUnitLabel(String label) {
     _unitLabel = label;
@@ -588,7 +590,6 @@ class ProjectState extends ChangeNotifier {
         if (models.isNotEmpty) {
           _availableModels = models.map((m) => m['name'].toString()).toList();
           
-          // If the currently selected model isn't downloaded anymore, pick the first available one
           if (!_availableModels.contains(_ollamaModel)) {
             _ollamaModel = _availableModels.first;
           }
@@ -624,6 +625,46 @@ class ProjectState extends ChangeNotifier {
     }
   }
 
+  Future<String> preloadOllamaModel() async {
+    if (_ollamaModel.isEmpty) return "No model selected";
+    
+    _isPreloadingModel = true;
+    notifyListeners();
+    
+    try {
+      final request = http.Request('POST', Uri.parse('http://localhost:11434/api/generate'));
+      request.headers['Content-Type'] = 'application/json';
+      request.body = jsonEncode({"model": _ollamaModel});
+      
+      final response = await http.Client().send(request);
+      await response.stream.bytesToString(); // Wait for model to load into VRAM
+      
+      _isPreloadingModel = false;
+      notifyListeners();
+      return "Success";
+    } catch (e) {
+      _isPreloadingModel = false;
+      notifyListeners();
+      return e.toString();
+    }
+  }
+
+  Future<String> unloadOllamaModel() async {
+    if (_ollamaModel.isEmpty) return "No model selected";
+    
+    try {
+      final request = http.Request('POST', Uri.parse('http://localhost:11434/api/generate'));
+      request.headers['Content-Type'] = 'application/json';
+      // keep_alive: 0 instantly unloads the model from memory!
+      request.body = jsonEncode({"model": _ollamaModel, "keep_alive": 0});
+      
+      await http.Client().send(request);
+      return "Success";
+    } catch (e) {
+      return e.toString();
+    }
+  }
+
   Future<void> triggerOllamaGeneration(String outputNodeId) async {
     final node = _nodes[outputNodeId];
     if (node == null) return;
@@ -644,7 +685,7 @@ class ProjectState extends ChangeNotifier {
       final request = http.Request('POST', Uri.parse('http://localhost:11434/api/generate'));
       request.headers['Content-Type'] = 'application/json';
       request.body = jsonEncode({
-        "model": _ollamaModel, // Dynamically use the selected model
+        "model": _ollamaModel, 
         "prompt": fullPrompt,
         "system": systemInstruction, 
         "stream": true, 
@@ -879,11 +920,11 @@ class TopBar extends StatelessWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children:[
-            const Icon(Icons.psychology, size: 80, color: kAccentColor), 
+            Image.asset('assets/logo.png', height: 200), 
             const SizedBox(height: 5),
-            const Text("Node Writer V2", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
+            const Text("Deep Writer (Node Writer V1.1)", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white)),
             const SizedBox(height: 8),
-            const Text("Now with Ollama AI Generation", style: TextStyle(fontSize: 14, color: Colors.white70)),
+            const Text("by Nathaniel Westveer", style: TextStyle(fontSize: 14, color: Colors.white70)),
           ],
         ),
         actions:[TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Close", style: TextStyle(color: kAccentColor)))],
@@ -891,63 +932,113 @@ class TopBar extends StatelessWidget {
     );
   }
 
-  void _showSettingsDialog(BuildContext context, ProjectState state) {
+  void _showSettingsDialog(BuildContext context, ProjectState projectState) {
     showDialog(
       context: context,
       builder: (ctx) {
-        String selected = state.unitLabel;
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: const Text("Project Settings"),
-            content: Column(
-              mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
-              children:[
-                const Text("What do you call a node?"), const SizedBox(height: 10),
-                DropdownButton<String>(
-                  value: selected, isExpanded: true,
-                  items: ["Scene", "Passage", "Paragraph", "Section", "Beat", "Card"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (val) {
-                    if (val != null) { setState(() => selected = val); state.setUnitLabel(val); }
-                  },
-                ),
-                
-                const SizedBox(height: 20), const Divider(), const SizedBox(height: 10),
-                
-                // NEW: Ollama Model Scanner Settings
-                const Text("Ollama Model"), const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: DropdownButton<String>(
-                        value: state.availableModels.contains(state.ollamaModel) ? state.ollamaModel : (state.availableModels.isNotEmpty ? state.availableModels.first : null),
-                        isExpanded: true,
-                        hint: Text(state.isScanningModels ? "Scanning Ollama..." : "No Models Found"),
-                        items: state.availableModels.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                        onChanged: (val) {
-                          if (val != null) { 
-                            state.setOllamaModel(val);
-                            setState(() {}); // refresh dialog ui
-                          }
-                        },
-                      ),
-                    ),
-                    IconButton(
-                      tooltip: "Refresh Models List",
-                      icon: state.isScanningModels 
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
-                        : const Icon(Icons.refresh),
-                      onPressed: () async {
-                        await state.fetchOllamaModels();
-                        setState(() {});
+        return Consumer<ProjectState>(
+          builder: (context, state, child) {
+            String selected = state.unitLabel;
+            return AlertDialog(
+              title: const Text("Project Settings"),
+              content: SizedBox(
+                width: 500, // <--- Added this line to make the box wider!
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start,
+                  children:[
+                    const Text("What do you call a node?"), const SizedBox(height: 10),
+                    DropdownButton<String>(
+                      value: selected, isExpanded: true,
+                      items: ["Scene", "Passage", "Paragraph", "Section", "Beat", "Card"].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                      onChanged: (val) {
+                        if (val != null) state.setUnitLabel(val);
                       },
+                    ),
+                    
+                    const SizedBox(height: 20), const Divider(), const SizedBox(height: 10),
+                    
+                    const Text("Ollama Model"), const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButton<String>(
+                            value: state.availableModels.contains(state.ollamaModel) ? state.ollamaModel : (state.availableModels.isNotEmpty ? state.availableModels.first : null),
+                            isExpanded: true,
+                            hint: Text(state.isScanningModels ? "Scanning Ollama..." : "No Models Found"),
+                            items: state.availableModels.map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                            onChanged: (val) {
+                              if (val != null) state.setOllamaModel(val);
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          tooltip: "Refresh Models List",
+                          icon: state.isScanningModels 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) 
+                            : const Icon(Icons.refresh),
+                          onPressed: () => state.fetchOllamaModels(),
+                        )
+                      ],
+                    ),
+                    const SizedBox(height: 15),
+                    
+                    // Preload & Unload Model Buttons
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2, // Gives the preload button a bit more space
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF335533),
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: state.isPreloadingModel
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                : const Icon(Icons.memory, size: 18),
+                            label: Text(state.isPreloadingModel ? "LOADING..." : "PRELOAD TO VRAM"),
+                            onPressed: state.isPreloadingModel ? null : () async {
+                              final result = await state.preloadOllamaModel();
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                  content: Text(result == "Success" ? "${state.ollamaModel} loaded into memory!" : "Failed: $result"),
+                                  backgroundColor: result == "Success" ? Colors.green : Colors.red,
+                                ));
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          flex: 1, // Keeps the unload button a bit smaller
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: const BorderSide(color: Colors.redAccent),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            icon: const Icon(Icons.eject, size: 18),
+                            label: const Text("UNLOAD"),
+                            onPressed: () async {
+                              final result = await state.unloadOllamaModel();
+                              if (ctx.mounted) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
+                                  content: Text(result == "Success" ? "VRAM Cleared!" : "Failed: $result"),
+                                  backgroundColor: Colors.grey.shade900,
+                                ));
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     )
+                    
                   ],
                 ),
-                
-              ],
-            ),
-            actions:[TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Done"))],
-          ),
+              ),
+              actions:[TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Done"))],
+            );
+          },
         );
       },
     );
