@@ -32,7 +32,7 @@ All AI processing runs locally using your own models.
 
 ## ✨ Features
 
-### 🧠 Local AI Generation *(New in V2)*
+### 🧠 Local AI Generation *(New in v1.1*
 Native integration with **Ollama**.
 
 Automatically detects locally installed models (such as `gemma3:12b`, `llama3`, etc.) and enables:
