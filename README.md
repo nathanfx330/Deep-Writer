@@ -11,7 +11,7 @@ https://nathanfx330.github.io/blog/posts/deep-writer/
 
 **Deep Writer** is a nonlinear, AI-assisted narrative engine designed for visual thinking and complex storytelling.
 
-This repository currently contains **Node Writer V2**, a lightweight **Proof of Concept (PoC)** that serves as the technical foundation for the broader Deep Writer vision.
+This repository currently contains **Node Writer V1.1**, a lightweight **Proof of Concept (PoC)** that serves as the technical foundation for the broader Deep Writer vision.
 
 It combines:
 
@@ -44,7 +44,7 @@ Automatically detects locally installed models (such as `gemma3:12b`, `llama3`, 
 
 ---
 
-### 🚫 “No Backtalk” AI Mode *(New in V2)*
+### 🚫 “No Backtalk” AI Mode *(New in V1.1)*
 Optional strict system prompt mode forcing the AI to output **only raw story text**.
 
 Removes conversational filler such as:
