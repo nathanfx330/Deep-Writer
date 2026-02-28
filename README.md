@@ -4,6 +4,8 @@
 https://nathanfx330.github.io/blog/posts/deep-writer/
 
 ![Node Writer Screenshot](https://nathanfx330.github.io/blog/posts/node-writer/nw-3.png)
+![Deep Writer Screenshot](https://nathanfx330.github.io/blog/posts/deep-writer/dw.png)
+
 
 ---
 
