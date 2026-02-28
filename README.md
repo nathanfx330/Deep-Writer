@@ -3,7 +3,6 @@
 🌐 **Project Page**  
 https://nathanfx330.github.io/blog/posts/deep-writer/
 
-![Node Writer Screenshot](https://nathanfx330.github.io/blog/posts/node-writer/nw-3.png)
 ![Deep Writer Screenshot](https://nathanfx330.github.io/blog/posts/deep-writer/dw.png)
 
 
@@ -14,6 +13,9 @@ https://nathanfx330.github.io/blog/posts/deep-writer/
 **Deep Writer** is a nonlinear, AI-assisted narrative engine designed for visual thinking and complex storytelling.
 
 This repository currently contains **Node Writer V1.1**, a lightweight **Proof of Concept (PoC)** that serves as the technical foundation for the broader Deep Writer vision.
+
+Node Writer: https://github.com/nathanfx330/node-writer
+https://nathanfx330.github.io/blog/posts/node-writer/
 
 It combines:
 
